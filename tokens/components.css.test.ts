@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -104,6 +104,24 @@ describe("tokens/classes.css（テンプレート用クラスの公開契約）"
     );
     expect(block).toMatch(/&:checked \{\s*background-color:\s*var\(--color-primary\)/);
     expect(block).toMatch(/::before/);
+  });
+
+  /* 余白は見出しの文字サイズから導出される。負のマージンを固定値で書くと、
+   * card-sm / card-lg で罫線と帯の端がカードの縁から外れる。React 側も同じ式を使う。 */
+  it.each([
+    [".card-title-rule", classesCss],
+    [".card-footer-band", classesCss],
+    [".cn-card-title-rule", css],
+    [".cn-card-footer-band", css],
+  ])("%s は --card-optical から負のマージンを取ってカード幅いっぱいに引く", (selector, source) => {
+    expect(ruleBody(selector, source)).toMatch(/calc\(-1 \* var\(--card-optical\)\)/);
+  });
+
+  it.each([
+    [".card-title-rule-accent", classesCss],
+    ['.cn-card-title-rule[data-variant="accent"]', css],
+  ])("%s の既定色は --color-primary", (selector, source) => {
+    expect(ruleBody(selector, source)).toContain("var(--card-rule-color, var(--color-primary))");
   });
 
   /* field-visibility Island が評価するまで data-visible-when の塊を描かない。 */
@@ -297,5 +315,35 @@ describe("tokens/components.css", () => {
         /padding-block:\s*calc\(var\(--spacing\) \* 3\.5 - \(1lh - 1em\) \/ 2\)/,
       );
     });
+  });
+});
+
+describe("角丸の面に左罫線を付けない（基礎/角丸と影）", () => {
+  /* 太い左罫線は角丸の弧を切って角を濁らせる。状態・カテゴリは面の色・アイコン・
+   * タイトル下の罫線・Badge で示す。外す方向（border-left: 0）だけを許す。 */
+  it.each([
+    ["tokens/classes.css", classesCss],
+    ["tokens/components.css", css],
+  ])("%s は border-left / border-inline-start で線を引かない", (_file, source) => {
+    expect(source).not.toMatch(/border-(left|inline-start)(-width)?:\s*(?![\s0])/);
+  });
+
+  it.each([
+    ["tokens/classes.css", classesCss],
+    ["tokens/components.css", css],
+  ])("%s は border-l-* / border-s-* で太い線を引かない", (_file, source) => {
+    expect(source).not.toMatch(/\bborder-[ls]-([2-9]|\[)/);
+  });
+
+  it("components/ の .tsx は border-l-* / border-s-* で太い線を引かない", () => {
+    const files = readdirSync(join(process.cwd(), "components"), { recursive: true })
+      .map(String)
+      .filter((file) => file.endsWith(".tsx"));
+    const offenders = files.filter((file) =>
+      /\bborder-[ls]-([2-9]|\[)/.test(
+        readFileSync(join(process.cwd(), "components", file), "utf-8"),
+      ),
+    );
+    expect(offenders).toEqual([]);
   });
 });
